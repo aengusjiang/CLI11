@@ -1,4 +1,4 @@
-// Copyright (c) 2017-2023, University of Cincinnati, developed by Henry Schreiner
+// Copyright (c) 2017-2024, University of Cincinnati, developed by Henry Schreiner
 // under NSF AWARD 1414736 and by the respective contributors.
 // All rights reserved.
 //
@@ -6,8 +6,10 @@
 
 #pragma once
 
+// IWYU pragma: private, include "CLI/CLI.hpp"
+
 // This include is only needed for IDEs to discover symbols
-#include <CLI/Formatter.hpp>
+#include "../Formatter.hpp"
 
 // [CLI11:public_includes:set]
 #include <algorithm>
@@ -69,7 +71,7 @@ CLI11_INLINE std::string Formatter::make_description(const App *app) const {
     auto min_options = app->get_require_option_min();
     auto max_options = app->get_require_option_max();
     if(app->get_required()) {
-        desc += " REQUIRED ";
+        desc += " " + get_label("REQUIRED") + " ";
     }
     if((max_options == min_options) && (min_options > 0)) {
         if(min_options == 1) {
@@ -132,7 +134,7 @@ CLI11_INLINE std::string Formatter::make_usage(const App *app, std::string name)
             << (app->get_require_subcommand_min() == 0 ? "]" : "");
     }
 
-    out << std::endl;
+    out << '\n';
 
     return out.str();
 }
@@ -178,7 +180,7 @@ CLI11_INLINE std::string Formatter::make_subcommands(const App *app, AppFormatMo
     std::vector<std::string> subcmd_groups_seen;
     for(const App *com : subcommands) {
         if(com->get_name().empty()) {
-            if(!com->get_group().empty()) {
+            if(!com->get_group().empty() && com->get_group().front() != '+') {
                 out << make_expanded(com);
             }
             continue;
@@ -213,7 +215,10 @@ CLI11_INLINE std::string Formatter::make_subcommands(const App *app, AppFormatMo
 
 CLI11_INLINE std::string Formatter::make_subcommand(const App *sub) const {
     std::stringstream out;
-    detail::format_help(out, sub->get_display_name(true), sub->get_description(), column_width_);
+    detail::format_help(out,
+                        sub->get_display_name(true) + (sub->get_required() ? " " + get_label("REQUIRED") : ""),
+                        sub->get_description(),
+                        column_width_);
     return out.str();
 }
 

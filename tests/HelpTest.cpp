@@ -1,4 +1,4 @@
-// Copyright (c) 2017-2023, University of Cincinnati, developed by Henry Schreiner
+// Copyright (c) 2017-2024, University of Cincinnati, developed by Henry Schreiner
 // under NSF AWARD 1414736 and by the respective contributors.
 // All rights reserved.
 //
@@ -10,10 +10,10 @@
 #include "CLI/CLI.hpp"
 #endif
 
+#include "app_helper.hpp"
+
 #include "catch.hpp"
 #include <fstream>
-
-using Catch::Matchers::Contains;
 
 TEST_CASE("THelp: Basic", "[help]") {
     CLI::App app{"My prog"};
@@ -271,6 +271,35 @@ TEST_CASE("THelp: HiddenGroup", "[help]") {
 
     CHECK_THAT(help, Contains("something "));
     CHECK_THAT(help, Contains("another"));
+}
+
+// from https://github.com/CLIUtils/CLI11/issues/1045
+TEST_CASE("THelp: multiple_group", "[help]") {
+    CLI::App app{"test_group"};
+    auto *group1 = app.add_option_group("outGroup");
+    auto *group2 = app.add_option_group("inGroup");
+
+    std::string outFile("");
+    group1->add_option("--outfile,-o", outFile, "specify the file location of the output")->required();
+
+    std::string inFile("");
+    group2->add_option("--infile,-i", inFile, "specify the file location of the input")->required();
+
+    auto help = app.help();
+    int inCount = 0;
+    int outCount = 0;
+    auto iFind = help.find("inGroup");
+    while(iFind != std::string::npos) {
+        ++inCount;
+        iFind = help.find("inGroup", iFind + 6);
+    }
+    auto oFind = help.find("outGroup");
+    while(oFind != std::string::npos) {
+        ++outCount;
+        oFind = help.find("outGroup", oFind + 6);
+    }
+    CHECK(inCount == 1);
+    CHECK(outCount == 1);
 }
 
 TEST_CASE("THelp: OptionalPositionalAndOptions", "[help]") {
@@ -718,6 +747,22 @@ TEST_CASE("THelp: CustomHelp", "[help]") {
     } catch(const CLI::CallForHelp &e) {
         CHECK(e.get_exit_code() == static_cast<int>(CLI::ExitCodes::Success));
     }
+}
+
+TEST_CASE("THelp: HelpSubcommandPriority", "[help]") {
+    CLI::App app{"My prog"};
+
+    app.set_help_flag("-h", "display help and exit");
+
+    auto *sub1 = app.add_subcommand("sub1");
+    std::string someFile = "";
+
+    put_env("SOME_FILE", "NOT_A_FILE");
+    sub1->add_option("-f,--file", someFile)->envname("SOME_FILE")->required()->expected(1)->check(CLI::ExistingFile);
+
+    std::string input{"sub1 -h"};
+    CHECK_THROWS_AS(app.parse(input), CLI::CallForHelp);
+    unset_env("SOME_FILE");
 }
 
 TEST_CASE("THelp: NextLineShouldBeAlignmentInMultilineDescription", "[help]") {
@@ -1292,8 +1337,7 @@ TEST_CASE("TVersion: help", "[help]") {
     auto hvers = app.help();
     CHECK_THAT(hvers, Contains("help_for_version"));
 
-    app.set_version_flag(
-        "-v", []() { return std::string("VERSION2 " CLI11_VERSION); }, "help_for_version2");
+    app.set_version_flag("-v", []() { return std::string("VERSION2 " CLI11_VERSION); }, "help_for_version2");
     hvers = app.help();
     CHECK_THAT(hvers, Contains("help_for_version2"));
 }
@@ -1313,10 +1357,26 @@ TEST_CASE("TVersion: parse_throw", "[help]") {
     try {
         app.parse("--Version");
     } catch(const CLI::CallForVersion &v) {
-        CHECK_THAT(CLI11_VERSION, Catch::Equals(v.what()));
+        CHECK_THAT(CLI11_VERSION, Equals(v.what()));
         CHECK(0 == v.get_exit_code());
         const auto &appc = app;
         const auto *cptr = appc.get_version_ptr();
         CHECK(1U == cptr->count());
+    }
+}
+
+TEST_CASE("TVersion: exit", "[help]") {
+
+    CLI::App app;
+
+    app.set_version_flag("--version", CLI11_VERSION);
+
+    try {
+        app.parse("--version");
+    } catch(const CLI::CallForVersion &v) {
+        std::ostringstream out;
+        auto ret = app.exit(v, out);
+        CHECK_THAT(out.str(), Contains(CLI11_VERSION));
+        CHECK(0 == ret);
     }
 }
